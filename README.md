@@ -1,12 +1,12 @@
 # BugMeNot Autofill
 
-Firefox-first WebExtension to autofill login forms with community credentials.
+Browser extension to autofill login forms with BugMeNot credentials.
 
 ## Current status
 
 - Uses a mock credential service with hardcoded credentials.
 - Real BugMeNot retrieval is intentionally out of scope for now.
-- Right-click on a password field and choose `Get BugMeNot Mock Credentials`.
+- Right-click on a password field and choose `BugMeNot Autofill...`.
 - A modal displays multiple credentials; user selection fills username/password.
 - Error handling is intentionally console-only for this phase.
 - Success feedback UI after fill is currently out of scope.

@@ -6,7 +6,7 @@ browser.runtime.onInstalled.addListener(() => {
   browser.menus.create(
     {
       id: MENU_ID,
-      title: "Get BugMeNot Mock Credentials",
+      title: "BugMeNot Autofill...",
       contexts: ["password", "editable"]
     },
     () => {
