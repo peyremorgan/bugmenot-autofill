@@ -1,6 +1,6 @@
 console.log("[BugMeNot] Background script loading...");
 
-import { fetchCredentialsForDomain, extractDomainFromUrl } from "../common/mockCredentialService.js";
+import { fetchCredentialsForDomain, extractDomainFromUrl } from "../common/bmnCredentialService.js";
 
 // Context menu setup
 const MENU_ID = "bugmenot-autofill-open-picker";

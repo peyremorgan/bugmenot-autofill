@@ -25,8 +25,8 @@ describe("e2e modal autofill flow", () => {
     renderCredentialModal({
       domain: "example.com",
       credentials: [
-        { username: "mock-user-a", password: "mock-pass-a" },
-        { username: "mock-user-b", password: "mock-pass-b" }
+        { username: "sample-user-a", password: "sample-pass-a" },
+        { username: "sample-user-b", password: "sample-pass-b" }
       ],
       onSelect: async (credential) => {
         const fields = findLoginFields(document);
@@ -44,8 +44,8 @@ describe("e2e modal autofill flow", () => {
     secondCredential.click();
     await waitForAutofillCycle();
 
-    expect(document.getElementById("login-username").value).toBe("mock-user-b");
-    expect(document.getElementById("login-password").value).toBe("mock-pass-b");
+    expect(document.getElementById("login-username").value).toBe("sample-user-b");
+    expect(document.getElementById("login-password").value).toBe("sample-pass-b");
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -54,7 +54,7 @@ describe("e2e modal autofill flow", () => {
 
     renderCredentialModal({
       domain: "example.com",
-      credentials: [{ username: "mock-user-a", password: "mock-pass-a" }],
+      credentials: [{ username: "sample-user-a", password: "sample-pass-a" }],
       onSelect: (credential) => {
         const fields = findLoginFields(document);
         applyCredential(fields, credential);

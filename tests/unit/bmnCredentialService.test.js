@@ -6,7 +6,7 @@ import {
   extractDomainFromUrl,
   fetchCredentialsForDomain,
   normalizeDomain
-} from "../../src/common/mockCredentialService.js";
+} from "../../src/common/bmnCredentialService.js";
 
 const XOR_KEY = Object.freeze([
   27,
@@ -57,7 +57,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("mockCredentialService", () => {
+describe("bmnCredentialService", () => {
   it("normalizes domains", () => {
     expect(normalizeDomain(" WWW.Example.com ")).toBe("example.com");
   });
