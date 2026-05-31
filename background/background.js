@@ -1,3 +1,5 @@
+console.log("[BugMeNot] Background script loading...");
+
 // Mock credential service (inlined for Firefox compatibility)
 const DEFAULT_CREDENTIALS = Object.freeze([
   { username: "demo_user_1", password: "demo_pass_1" },
@@ -50,7 +52,10 @@ function extractDomainFromUrl(url) {
 // Context menu setup
 const MENU_ID = "bugmenot-autofill-open-picker";
 
+console.log("[BugMeNot] Registering onInstalled listener...");
+
 browser.runtime.onInstalled.addListener(() => {
+  console.log("[BugMeNot] onInstalled fired, creating context menu...");
   browser.menus.create(
     {
       id: MENU_ID,
@@ -60,34 +65,45 @@ browser.runtime.onInstalled.addListener(() => {
     () => {
       const lastError = browser.runtime.lastError;
       if (lastError) {
-        console.error("Failed to create context menu", lastError);
+        console.error("[BugMeNot] Failed to create context menu:", lastError);
+      } else {
+        console.log("[BugMeNot] Context menu created successfully!");
       }
     }
   );
 });
+
+console.log("[BugMeNot] Registering onMessage listener...");
 
 browser.runtime.onMessage.addListener((message) => {
   if (message?.type !== "bugmenot:getCredentials") {
     return undefined;
   }
 
+  console.log("[BugMeNot] Received getCredentials message:", message);
   try {
     const credentials = getMockCredentialsForDomain(message.domain);
+    console.log("[BugMeNot] Returning credentials:", credentials);
     return Promise.resolve({ ok: true, credentials });
   } catch (error) {
-    console.error("Failed to resolve mock credentials", error);
+    console.error("[BugMeNot] Failed to resolve mock credentials:", error);
     return Promise.resolve({ ok: false, credentials: [] });
   }
 });
 
+console.log("[BugMeNot] Registering menus.onClicked listener...");
+
 browser.menus.onClicked.addListener(async (info, tab) => {
+  console.log("[BugMeNot] Context menu clicked:", info);
   if (info.menuItemId !== MENU_ID || !tab?.id) {
+    console.log("[BugMeNot] Ignoring click - wrong menu ID or no tab");
     return;
   }
 
   try {
     const domain = extractDomainFromUrl(info.pageUrl || tab.url || "");
     const credentials = getMockCredentialsForDomain(domain);
+    console.log("[BugMeNot] Sending credentials to tab:", { domain, credentialCount: credentials.length });
 
     await browser.tabs.sendMessage(tab.id, {
       type: "bugmenot:openCredentialPicker",
@@ -97,7 +113,10 @@ browser.menus.onClicked.addListener(async (info, tab) => {
         targetElementId: info.targetElementId || null
       }
     });
+    console.log("[BugMeNot] Message sent successfully");
   } catch (error) {
-    console.error("Failed to open credential picker", error);
+    console.error("[BugMeNot] Failed to open credential picker:", error);
   }
 });
+
+console.log("[BugMeNot] Background script loaded successfully!");

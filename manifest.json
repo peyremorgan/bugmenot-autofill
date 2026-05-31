@@ -12,7 +12,8 @@
   "permissions": ["menus"],
   "host_permissions": ["*://*/*"],
   "background": {
-    "scripts": ["background/background.js"]
+    "scripts": ["background/background.js"],
+    "type": "classic"
   },
   "content_scripts": [
     {
