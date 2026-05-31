@@ -1,6 +1,6 @@
 console.log("[BugMeNot] Background script loading...");
 
-import { getMockCredentialsForDomain, extractDomainFromUrl } from "../common/mockCredentialService.js";
+import { fetchCredentialsForDomain, extractDomainFromUrl } from "../common/mockCredentialService.js";
 
 // Context menu setup
 const MENU_ID = "bugmenot-autofill-open-picker";
@@ -28,19 +28,19 @@ browser.runtime.onInstalled.addListener(() => {
 
 console.log("[BugMeNot] Registering onMessage listener...");
 
-browser.runtime.onMessage.addListener((message) => {
+browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type !== "bugmenot:getCredentials") {
     return undefined;
   }
 
   console.log("[BugMeNot] Received getCredentials message:", message);
   try {
-    const credentials = getMockCredentialsForDomain(message.domain);
+    const credentials = await fetchCredentialsForDomain(message.domain);
     console.log("[BugMeNot] Returning credentials:", credentials);
-    return Promise.resolve({ ok: true, credentials });
+    return { ok: true, credentials };
   } catch (error) {
-    console.error("[BugMeNot] Failed to resolve mock credentials:", error);
-    return Promise.resolve({ ok: false, credentials: [] });
+    console.error("[BugMeNot] Failed to resolve credentials:", error);
+    return { ok: false, credentials: [] };
   }
 });
 
@@ -54,7 +54,7 @@ browser.menus.onClicked.addListener(async (info, tab) => {
   }
 
   const domain = extractDomainFromUrl(tab.url);
-  const credentials = getMockCredentialsForDomain(domain);
+  const credentials = await fetchCredentialsForDomain(domain);
   console.log(`[BugMeNot] Domain: ${domain}, Credentials count: ${credentials.length}`);
 
   try {
