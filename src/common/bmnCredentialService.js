@@ -34,6 +34,59 @@ const XOR_KEY = Object.freeze([
 ]);
 
 const BUGMENOT_BASE_URL = "https://bugmenot.com/view/";
+const CACHE_TTL_MS = 60 * 60 * 1000;
+
+const credentialCache = new Map();
+const inFlightRequests = new Map();
+
+function cloneCredentials(credentials) {
+  return credentials.map((credential) => ({
+    username: credential.username,
+    password: credential.password
+  }));
+}
+
+function getCachedCredentials(domain) {
+  const entry = credentialCache.get(domain);
+  if (!entry) {
+    return null;
+  }
+
+  if (entry.expiresAt <= Date.now()) {
+    credentialCache.delete(domain);
+    return null;
+  }
+
+  return cloneCredentials(entry.credentials);
+}
+
+function setCachedCredentials(domain, credentials) {
+  credentialCache.set(domain, {
+    credentials: cloneCredentials(credentials),
+    expiresAt: Date.now() + CACHE_TTL_MS
+  });
+}
+
+async function requestCredentialsFromBugMeNot(url) {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "omit",
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      console.error(`[BugMeNot] Failed to fetch credentials (${response.status}) for ${url}`);
+      return null;
+    }
+
+    const html = await response.text();
+    return parseCredentialsFromHtml(html);
+  } catch (error) {
+    console.error("[BugMeNot] Failed to fetch credentials:", error);
+    return null;
+  }
+}
 
 function base64ToBytes(input) {
   const decoded = atob(input);
@@ -107,29 +160,44 @@ export function parseCredentialsFromHtml(htmlString) {
 }
 
 export async function fetchCredentialsForDomain(domain) {
-  const url = buildBugMeNotUrl(domain);
+  const normalizedDomain = normalizeDomain(domain);
+  const url = buildBugMeNotUrl(normalizedDomain);
   if (!url) {
     return [];
   }
 
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      credentials: "omit",
-      cache: "no-store"
-    });
+  const cachedCredentials = getCachedCredentials(normalizedDomain);
+  if (cachedCredentials !== null) {
+    return cachedCredentials;
+  }
 
-    if (!response.ok) {
-      console.error(`[BugMeNot] Failed to fetch credentials (${response.status}) for ${url}`);
+  const existingRequest = inFlightRequests.get(normalizedDomain);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const requestPromise = (async () => {
+    const credentials = await requestCredentialsFromBugMeNot(url);
+    if (credentials === null) {
       return [];
     }
 
-    const html = await response.text();
-    return parseCredentialsFromHtml(html);
-  } catch (error) {
-    console.error("[BugMeNot] Failed to fetch credentials:", error);
-    return [];
+    setCachedCredentials(normalizedDomain, credentials);
+    return cloneCredentials(credentials);
+  })();
+
+  inFlightRequests.set(normalizedDomain, requestPromise);
+
+  try {
+    return await requestPromise;
+  } finally {
+    inFlightRequests.delete(normalizedDomain);
   }
+}
+
+export function __resetCredentialCacheForTesting() {
+  credentialCache.clear();
+  inFlightRequests.clear();
 }
 
 export function normalizeDomain(input) {

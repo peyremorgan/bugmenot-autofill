@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  __resetCredentialCacheForTesting,
   buildBugMeNotUrl,
   decryptDataS,
   extractDomainFromUrl,
@@ -53,6 +54,8 @@ function encodeDataS(value) {
 }
 
 afterEach(() => {
+  __resetCredentialCacheForTesting();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -153,5 +156,126 @@ describe("bmnCredentialService", () => {
     const credentials = await fetchCredentialsForDomain("");
     expect(credentials).toEqual([]);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("caches credentials for repeated requests to the same domain", async () => {
+    const html = `
+      <div id="content">
+        <div class="account">
+          <div class="account__credentials">
+            <kbd data-s="${encodeDataS("cached-user@example.com")}"></kbd>
+            <kbd data-s="${encodeDataS("cached-pass-123")}"></kbd>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => html
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const first = await fetchCredentialsForDomain("example.com");
+    const second = await fetchCredentialsForDomain("example.com");
+
+    expect(first).toEqual([{ username: "cached-user@example.com", password: "cached-pass-123" }]);
+    expect(second).toEqual(first);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("caches empty credential results", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => "<div id='content'></div>"
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const first = await fetchCredentialsForDomain("empty.example");
+    const second = await fetchCredentialsForDomain("empty.example");
+
+    expect(first).toEqual([]);
+    expect(second).toEqual([]);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not cache failed fetch responses", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.fn().mockRejectedValue(new Error("network down"));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const first = await fetchCredentialsForDomain("failing.example");
+    const second = await fetchCredentialsForDomain("failing.example");
+
+    expect(first).toEqual([]);
+    expect(second).toEqual([]);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("deduplicates simultaneous requests for the same domain", async () => {
+    const html = `
+      <div id="content">
+        <div class="account">
+          <div class="account__credentials">
+            <kbd data-s="${encodeDataS("parallel-user@example.com")}"></kbd>
+            <kbd data-s="${encodeDataS("parallel-pass-123")}"></kbd>
+          </div>
+        </div>
+      </div>
+    `;
+
+    let resolveFetch;
+    const fetchSpy = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        })
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const firstPromise = fetchCredentialsForDomain("parallel.example");
+    const secondPromise = fetchCredentialsForDomain("parallel.example");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    resolveFetch({
+      ok: true,
+      text: async () => html
+    });
+
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
+    expect(first).toEqual([{ username: "parallel-user@example.com", password: "parallel-pass-123" }]);
+    expect(second).toEqual(first);
+  });
+
+  it("expires cache entries after the TTL window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const html = `
+      <div id="content">
+        <div class="account">
+          <div class="account__credentials">
+            <kbd data-s="${encodeDataS("ttl-user@example.com")}"></kbd>
+            <kbd data-s="${encodeDataS("ttl-pass-123")}"></kbd>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => html
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await fetchCredentialsForDomain("ttl.example");
+    await fetchCredentialsForDomain("ttl.example");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date("2026-01-01T01:00:00.001Z"));
+    await fetchCredentialsForDomain("ttl.example");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });
