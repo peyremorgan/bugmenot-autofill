@@ -1,6 +1,215 @@
-import { applyCredential, findLoginFields } from "../src/common/formDetection.js";
-import { renderCredentialModal } from "../src/content/credentialModal.js";
+// Form detection utilities (inlined for Firefox compatibility)
+const USERNAME_HINTS = ["user", "username", "email", "login", "identifier", "account"];
 
+function scoreInput(input) {
+  const type = (input.getAttribute("type") || "text").toLowerCase();
+  if (type === "hidden" || type === "password") {
+    return -1;
+  }
+
+  const id = (input.id || "").toLowerCase();
+  const name = (input.name || "").toLowerCase();
+  const autocomplete = (input.getAttribute("autocomplete") || "").toLowerCase();
+  const text = [id, name, autocomplete].join(" ");
+
+  let score = 0;
+  if (type === "email") {
+    score += 3;
+  }
+  if (type === "text") {
+    score += 2;
+  }
+  if (autocomplete.includes("username") || autocomplete.includes("email")) {
+    score += 4;
+  }
+  for (const hint of USERNAME_HINTS) {
+    if (text.includes(hint)) {
+      score += 2;
+    }
+  }
+
+  return score;
+}
+
+function findLoginFields(root = document, targetElement = null) {
+  const passwordField = resolvePasswordField(root, targetElement);
+  if (!passwordField) {
+    return null;
+  }
+
+  const usernameField = resolveUsernameField(passwordField, root);
+  if (!usernameField) {
+    return null;
+  }
+
+  return { usernameField, passwordField };
+}
+
+function resolvePasswordField(root, targetElement) {
+  if (targetElement instanceof HTMLInputElement && targetElement.type === "password") {
+    return targetElement;
+  }
+
+  return root.querySelector("input[type='password']");
+}
+
+function resolveUsernameField(passwordField, root) {
+  const scope = passwordField.form || root;
+  const candidates = Array.from(scope.querySelectorAll("input"));
+
+  let bestCandidate = null;
+  let bestScore = -1;
+
+  for (const input of candidates) {
+    if (input === passwordField || input.disabled || input.readOnly) {
+      continue;
+    }
+
+    const score = scoreInput(input);
+    if (score > bestScore) {
+      bestScore = score;
+      bestCandidate = input;
+    }
+  }
+
+  if (bestCandidate) {
+    return bestCandidate;
+  }
+
+  const allInputs = Array.from(scope.querySelectorAll("input"));
+  const passwordIndex = allInputs.findIndex((entry) => entry === passwordField);
+  if (passwordIndex > 0) {
+    return allInputs[passwordIndex - 1];
+  }
+
+  return null;
+}
+
+function applyCredential(fields, credential) {
+  if (!fields || !credential) {
+    return false;
+  }
+
+  const { usernameField, passwordField } = fields;
+  if (!usernameField || !passwordField) {
+    return false;
+  }
+
+  usernameField.value = credential.username;
+  passwordField.value = credential.password;
+
+  dispatchInputEvents(usernameField);
+  dispatchInputEvents(passwordField);
+
+  return true;
+}
+
+function dispatchInputEvents(element) {
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+// Credential modal utilities (inlined for Firefox compatibility)
+const MODAL_ID = "bugmenot-autofill-modal";
+
+function clearCredentialModal(root = document) {
+  const existing = root.getElementById(MODAL_ID);
+  if (existing) {
+    existing.remove();
+  }
+}
+
+function renderCredentialModal({ domain, credentials, onSelect, onClose }, root = document) {
+  clearCredentialModal(root);
+
+  const overlay = root.createElement("div");
+  overlay.id = MODAL_ID;
+  overlay.style.position = "fixed";
+  overlay.style.inset = "0";
+  overlay.style.background = "rgba(0, 0, 0, 0.45)";
+  overlay.style.zIndex = "2147483647";
+  overlay.style.display = "flex";
+  overlay.style.alignItems = "center";
+  overlay.style.justifyContent = "center";
+
+  const panel = root.createElement("div");
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-modal", "true");
+  panel.style.background = "#fff";
+  panel.style.color = "#111";
+  panel.style.padding = "16px";
+  panel.style.borderRadius = "10px";
+  panel.style.width = "min(520px, 92vw)";
+  panel.style.boxShadow = "0 12px 40px rgba(0, 0, 0, 0.3)";
+
+  const title = root.createElement("h2");
+  title.textContent = "Select Mock Credentials";
+  title.style.margin = "0 0 8px 0";
+  title.style.fontSize = "18px";
+
+  const subtitle = root.createElement("p");
+  subtitle.textContent = domain ? `Domain: ${domain}` : "Domain unavailable";
+  subtitle.style.margin = "0 0 12px 0";
+  subtitle.style.fontSize = "14px";
+
+  const list = root.createElement("div");
+  list.style.display = "grid";
+  list.style.gap = "8px";
+
+  credentials.forEach((credential, index) => {
+    const row = root.createElement("button");
+    row.type = "button";
+    row.style.textAlign = "left";
+    row.style.border = "1px solid #d0d0d0";
+    row.style.background = "#f8f8f8";
+    row.style.padding = "10px";
+    row.style.borderRadius = "8px";
+    row.style.cursor = "pointer";
+    row.dataset.index = String(index);
+    row.textContent = `${credential.username} / ${credential.password}`;
+    row.addEventListener("click", () => {
+      onSelect(credential);
+      clearCredentialModal(root);
+    });
+    list.appendChild(row);
+  });
+
+  const footer = root.createElement("div");
+  footer.style.marginTop = "12px";
+  footer.style.display = "flex";
+  footer.style.justifyContent = "flex-end";
+
+  const cancel = root.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = "Cancel";
+  cancel.style.border = "1px solid #bbb";
+  cancel.style.background = "#fff";
+  cancel.style.padding = "8px 12px";
+  cancel.style.borderRadius = "8px";
+  cancel.style.cursor = "pointer";
+  cancel.addEventListener("click", () => {
+    onClose();
+    clearCredentialModal(root);
+  });
+
+  footer.appendChild(cancel);
+  panel.appendChild(title);
+  panel.appendChild(subtitle);
+  panel.appendChild(list);
+  panel.appendChild(footer);
+  overlay.appendChild(panel);
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) {
+      onClose();
+      clearCredentialModal(root);
+    }
+  });
+
+  root.body.appendChild(overlay);
+}
+
+// Message listener
 browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type !== "bugmenot:openCredentialPicker") {
     return undefined;
