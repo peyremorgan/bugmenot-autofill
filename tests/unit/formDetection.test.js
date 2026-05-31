@@ -53,4 +53,38 @@ describe("formDetection", () => {
     const fields = findLoginFields(document);
     expect(fields).toBeNull();
   });
+
+  it("prefers email-like username fields by heuristic", () => {
+    document.body.innerHTML = `
+      <form>
+        <input type="text" id="display-name" name="display" />
+        <input type="email" id="account-email" name="email" autocomplete="username" />
+        <input type="password" id="password" />
+      </form>
+    `;
+
+    const fields = findLoginFields(document);
+    expect(fields).not.toBeNull();
+    expect(fields.usernameField.id).toBe("account-email");
+  });
+
+  it("uses the target password element when provided", () => {
+    document.body.innerHTML = `
+      <form id="first">
+        <input type="text" id="first-user" />
+        <input type="password" id="first-pass" />
+      </form>
+      <form id="second">
+        <input type="text" id="second-user" />
+        <input type="password" id="second-pass" />
+      </form>
+    `;
+
+    const targetPassword = document.getElementById("second-pass");
+    const fields = findLoginFields(document, targetPassword);
+
+    expect(fields).not.toBeNull();
+    expect(fields.passwordField.id).toBe("second-pass");
+    expect(fields.usernameField.id).toBe("second-user");
+  });
 });

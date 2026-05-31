@@ -36,4 +36,26 @@ describe("e2e modal autofill flow", () => {
     expect(document.getElementById("login-password").value).toBe("mock-pass-b");
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("closes modal on cancel without changing fields", () => {
+    const onClose = vi.fn();
+
+    renderCredentialModal({
+      domain: "example.com",
+      credentials: [{ username: "mock-user-a", password: "mock-pass-a" }],
+      onSelect: (credential) => {
+        const fields = findLoginFields(document);
+        applyCredential(fields, credential);
+      },
+      onClose
+    });
+
+    const cancel = document.querySelector("#bugmenot-autofill-modal button:not([data-index])");
+    cancel.click();
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(document.getElementById("bugmenot-autofill-modal")).toBeNull();
+    expect(document.getElementById("login-username").value).toBe("");
+    expect(document.getElementById("login-password").value).toBe("");
+  });
 });
