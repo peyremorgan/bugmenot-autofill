@@ -1,0 +1,6 @@
+node_modules/
+.vscode/
+.web-ext-artifacts/
+coverage/
+.DS_Store
+*.log

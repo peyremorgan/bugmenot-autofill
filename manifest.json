@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "BugMeNot Autofill",
+  "version": "0.1.0",
+  "description": "Autofill login forms using BugMeNot credentials (mock service for now).",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "bugmenot-autofill@example.com",
+      "strict_min_version": "127.0"
+    }
+  },
+  "permissions": ["menus"],
+  "host_permissions": ["*://*/*"],
+  "background": {
+    "scripts": ["background/background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["content/content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
