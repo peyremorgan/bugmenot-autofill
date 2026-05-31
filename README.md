@@ -36,10 +36,15 @@ This creates `bugmenot-autofill.xpi`. Then:
 2. Click **Load Temporary Add-on**
 3. Select `bugmenot-autofill.xpi`
 
-### Option 2: Direct load
+### Option 2: Direct load (ZIP archive)
 
-1. Open `about:debugging#/runtime/this-firefox`
-2. Click **Load Temporary Add-on**
-3. Navigate to the project directory and select `manifest.json`
+1. Create a ZIP archive containing the required files:
+   ```bash
+   zip -r bugmenot-autofill.zip manifest.json background/ content/
+   ```
 
-**Note:** If files are missing after loading (check Browser Console for errors), use Option 1 instead.
+2. Open `about:debugging#/runtime/this-firefox`
+3. Click **Load Temporary Add-on**
+4. Select the `bugmenot-autofill.zip` file
+
+**Note:** Loading `manifest.json` directly may fail to load associated files. Use a ZIP archive for reliable loading.
