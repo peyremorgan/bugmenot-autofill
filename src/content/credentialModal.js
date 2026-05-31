@@ -31,7 +31,7 @@ export function renderCredentialModal({ domain, credentials, onSelect, onClose }
   panel.style.boxShadow = "0 12px 40px rgba(0, 0, 0, 0.3)";
 
   const title = root.createElement("h2");
-  title.textContent = "Select Mock Credentials";
+  title.textContent = "Select Credentials";
   title.style.margin = "0 0 8px 0";
   title.style.fontSize = "18px";
 
