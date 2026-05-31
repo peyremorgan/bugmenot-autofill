@@ -13,9 +13,19 @@ Browser extension to autofill login forms with BugMeNot credentials.
 
 ```bash
 npm install
+npm run build  # Build the extension
 npm run lint
 npm test
 ```
+
+### Build process
+
+The extension source code is in `src/` and is bundled into `dist/` using esbuild:
+
+- `src/background/` → `dist/background/background.js`
+- `src/content/` → `dist/content/content.js`
+
+Run `npm run build` before loading the extension or testing locally.
 
 ### Test scripts
 
@@ -24,27 +34,16 @@ npm test
 
 ## Load in Firefox / LibreWolf
 
-### Option 1: Using XPI package (Recommended)
+First, build the extension:
 
 ```bash
-./package-extension.sh
+npm run build
 ```
 
-This creates `bugmenot-autofill.xpi`. Then:
+Then load it in Firefox:
 
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click **Load Temporary Add-on**
-3. Select `bugmenot-autofill.xpi`
+3. Select `dist/manifest.json`
 
-### Option 2: Direct load (ZIP archive)
-
-1. Create a ZIP archive containing the required files:
-   ```bash
-   zip -r bugmenot-autofill.zip manifest.json background/ content/
-   ```
-
-2. Open `about:debugging#/runtime/this-firefox`
-3. Click **Load Temporary Add-on**
-4. Select the `bugmenot-autofill.zip` file
-
-**Note:** Loading `manifest.json` directly may fail to load associated files. Use a ZIP archive for reliable loading.
+**Note:** Always run `npm run build` after making changes to the source code.
