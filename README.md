@@ -4,8 +4,9 @@ Browser extension to autofill login forms with BugMeNot credentials.
 
 ## Current status
 
-- Uses a mock credential service with hardcoded credentials.
-- Real BugMeNot retrieval is intentionally out of scope for now.
+- Fetches credentials from `https://bugmenot.com/view/{domain}` on demand.
+- Decrypts BugMeNot's `data-s` credential fields client-side in the extension.
+- Returns an empty credential list when fetch/parsing fails and logs the error.
 - Right-click on a password field and choose `BugMeNot Autofill...`.
 - A modal displays multiple credentials; user selection fills username/password.
 
@@ -29,7 +30,7 @@ Run `npm run build` before loading the extension or testing locally.
 
 ### Test scripts
 
-- `npm run test:unit`: unit tests for mock service, form detection, and modal logic.
+- `npm run test:unit`: unit tests for BugMeNot service, form detection, and modal logic.
 - `npm run test:e2e`: DOM-level end-to-end flow tests for modal selection and cancel behavior.
 
 ## Load in Firefox / LibreWolf
