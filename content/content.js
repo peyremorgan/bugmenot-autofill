@@ -2,6 +2,13 @@ console.log("[BugMeNot] Content script loading...");
 
 // Form detection utilities (inlined for Firefox compatibility)
 const USERNAME_HINTS = ["user", "username", "email", "login", "identifier", "account"];
+const DEFAULT_FILL_OPTIONS = {
+  betweenFieldsDelayMs: 60,
+  fieldFocusDelayMs: 20,
+  mutationWindowMs: 250,
+  retryDelayMs: 120,
+  maxRetries: 1
+};
 
 function scoreInput(input) {
   const type = (input.getAttribute("type") || "text").toLowerCase();
@@ -87,7 +94,7 @@ function resolveUsernameField(passwordField, root) {
   return null;
 }
 
-function applyCredential(fields, credential) {
+async function applyCredential(fields, credential, options = {}) {
   if (!fields || !credential) {
     return false;
   }
@@ -97,18 +104,123 @@ function applyCredential(fields, credential) {
     return false;
   }
 
-  usernameField.value = credential.username;
-  passwordField.value = credential.password;
+  const mergedOptions = { ...DEFAULT_FILL_OPTIONS, ...options };
+  const usernameValue = String(credential.username ?? "");
+  const passwordValue = String(credential.password ?? "");
 
-  dispatchInputEvents(usernameField);
-  dispatchInputEvents(passwordField);
+  const usernameApplied = await fillFieldWithRetries(usernameField, usernameValue, mergedOptions);
+  if (!usernameApplied) {
+    return false;
+  }
 
-  return true;
+  await wait(mergedOptions.betweenFieldsDelayMs);
+  const passwordApplied = await fillFieldWithRetries(passwordField, passwordValue, mergedOptions);
+  if (!passwordApplied) {
+    return false;
+  }
+
+  return usernameField.value === usernameValue && passwordField.value === passwordValue;
+}
+
+async function fillFieldWithRetries(field, value, options) {
+  for (let attempt = 0; attempt <= options.maxRetries; attempt += 1) {
+    await simulateUserInput(field, value, options.fieldFocusDelayMs);
+    const didPersist = await waitForValuePersistence(field, value, options.mutationWindowMs);
+    if (didPersist) {
+      return true;
+    }
+
+    if (attempt < options.maxRetries) {
+      await wait(options.retryDelayMs);
+    }
+  }
+
+  return false;
+}
+
+async function simulateUserInput(field, value, focusDelayMs) {
+  if (document.activeElement !== field && typeof field.focus === "function") {
+    field.focus();
+  }
+
+  await wait(focusDelayMs);
+  setFieldValue(field, value);
+  dispatchBeforeInputEvent(field, value);
+  dispatchInputEvents(field);
+}
+
+function setFieldValue(field, value) {
+  const prototype = Object.getPrototypeOf(field);
+  const valueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  if (valueSetter) {
+    valueSetter.call(field, value);
+    return;
+  }
+
+  field.value = value;
+}
+
+function dispatchBeforeInputEvent(element, value) {
+  if (typeof InputEvent !== "function") {
+    return;
+  }
+
+  element.dispatchEvent(new InputEvent("beforeinput", {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    data: value,
+    inputType: "insertText"
+  }));
+}
+
+async function waitForValuePersistence(field, expectedValue, windowMs) {
+  let mismatchDetected = field.value !== expectedValue;
+  const observer = typeof MutationObserver === "function"
+    ? new MutationObserver(() => {
+      if (field.value !== expectedValue) {
+        mismatchDetected = true;
+      }
+    })
+    : null;
+
+  if (observer) {
+    observer.observe(field, {
+      attributes: true,
+      attributeFilter: ["value"]
+    });
+  }
+
+  const interval = setInterval(() => {
+    if (field.value !== expectedValue) {
+      mismatchDetected = true;
+    }
+  }, 20);
+
+  await wait(windowMs);
+  clearInterval(interval);
+  observer?.disconnect();
+
+  return !mismatchDetected && field.value === expectedValue;
 }
 
 function dispatchInputEvents(element) {
-  element.dispatchEvent(new Event("input", { bubbles: true }));
-  element.dispatchEvent(new Event("change", { bubbles: true }));
+  element.dispatchEvent(new Event("input", {
+    bubbles: true,
+    cancelable: true,
+    composed: true
+  }));
+  element.dispatchEvent(new Event("change", {
+    bubbles: true,
+    cancelable: true,
+    composed: true
+  }));
+}
+
+function wait(durationMs) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
 }
 
 // Credential modal utilities (inlined for Firefox compatibility)
@@ -169,8 +281,8 @@ function renderCredentialModal({ domain, credentials, onSelect, onClose }, root 
     row.style.cursor = "pointer";
     row.dataset.index = String(index);
     row.textContent = `${credential.username} / ${credential.password}`;
-    row.addEventListener("click", () => {
-      onSelect(credential);
+    row.addEventListener("click", async () => {
+      await Promise.resolve(onSelect(credential));
       clearCredentialModal(root);
     });
     list.appendChild(row);
@@ -242,7 +354,7 @@ browser.runtime.onMessage.addListener(async (message) => {
   renderCredentialModal({
     domain,
     credentials,
-    onSelect: (credential) => {
+    onSelect: async (credential) => {
       console.log("[BugMeNot] Credential selected:", credential.username);
       const fields = findLoginFields(document, targetElement);
       if (!fields) {
@@ -251,7 +363,7 @@ browser.runtime.onMessage.addListener(async (message) => {
       }
 
       console.log("[BugMeNot] Found fields, applying credential...");
-      const didApply = applyCredential(fields, credential);
+      const didApply = await applyCredential(fields, credential);
       if (!didApply) {
         console.error("[BugMeNot] Failed to apply credential");
       } else {

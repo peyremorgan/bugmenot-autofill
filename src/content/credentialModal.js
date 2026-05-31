@@ -55,8 +55,8 @@ export function renderCredentialModal({ domain, credentials, onSelect, onClose }
     row.style.cursor = "pointer";
     row.dataset.index = String(index);
     row.textContent = `${credential.username} / ${credential.password}`;
-    row.addEventListener("click", () => {
-      onSelect(credential);
+    row.addEventListener("click", async () => {
+      await Promise.resolve(onSelect(credential));
       clearCredentialModal(root);
     });
     list.appendChild(row);

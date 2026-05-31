@@ -3,6 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyCredential, findLoginFields } from "../../src/common/formDetection.js";
 import { renderCredentialModal } from "../../src/content/credentialModal.js";
 
+function waitForAutofillCycle() {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 80);
+  });
+}
+
 describe("e2e modal autofill flow", () => {
   beforeEach(() => {
     document.body.innerHTML = `
@@ -13,7 +19,7 @@ describe("e2e modal autofill flow", () => {
     `;
   });
 
-  it("selects credential from modal and fills form", () => {
+  it("selects credential from modal and fills form", async () => {
     const onClose = vi.fn();
 
     renderCredentialModal({
@@ -22,15 +28,21 @@ describe("e2e modal autofill flow", () => {
         { username: "mock-user-a", password: "mock-pass-a" },
         { username: "mock-user-b", password: "mock-pass-b" }
       ],
-      onSelect: (credential) => {
+      onSelect: async (credential) => {
         const fields = findLoginFields(document);
-        applyCredential(fields, credential);
+        await applyCredential(fields, credential, {
+          betweenFieldsDelayMs: 0,
+          fieldFocusDelayMs: 0,
+          mutationWindowMs: 0,
+          retryDelayMs: 0
+        });
       },
       onClose
     });
 
     const secondCredential = document.querySelector("button[data-index='1']");
     secondCredential.click();
+    await waitForAutofillCycle();
 
     expect(document.getElementById("login-username").value).toBe("mock-user-b");
     expect(document.getElementById("login-password").value).toBe("mock-pass-b");
@@ -57,5 +69,42 @@ describe("e2e modal autofill flow", () => {
     expect(document.getElementById("bugmenot-autofill-modal")).toBeNull();
     expect(document.getElementById("login-username").value).toBe("");
     expect(document.getElementById("login-password").value).toBe("");
+  });
+
+  it("fills both fields when a reactive page reverts first username attempt", async () => {
+    let revertedOnce = false;
+    const usernameField = document.getElementById("login-username");
+
+    usernameField.addEventListener("input", () => {
+      if (revertedOnce) {
+        return;
+      }
+
+      revertedOnce = true;
+      usernameField.value = "";
+    });
+
+    renderCredentialModal({
+      domain: "example.com",
+      credentials: [{ username: "reactive-user", password: "reactive-pass" }],
+      onSelect: async (credential) => {
+        const fields = findLoginFields(document);
+        await applyCredential(fields, credential, {
+          betweenFieldsDelayMs: 0,
+          fieldFocusDelayMs: 0,
+          mutationWindowMs: 10,
+          retryDelayMs: 0,
+          maxRetries: 1
+        });
+      },
+      onClose: vi.fn()
+    });
+
+    const firstCredential = document.querySelector("button[data-index='0']");
+    firstCredential.click();
+    await waitForAutofillCycle();
+
+    expect(document.getElementById("login-username").value).toBe("reactive-user");
+    expect(document.getElementById("login-password").value).toBe("reactive-pass");
   });
 });
