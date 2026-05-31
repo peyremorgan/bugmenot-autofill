@@ -6,6 +6,10 @@ Firefox-first WebExtension to autofill login forms with community credentials.
 
 - Uses a mock credential service with hardcoded credentials.
 - Real BugMeNot retrieval is intentionally out of scope for now.
+- Right-click on a password field and choose `Get BugMeNot Mock Credentials`.
+- A modal displays multiple credentials; user selection fills username/password.
+- Error handling is intentionally console-only for this phase.
+- Success feedback UI after fill is currently out of scope.
 
 ## Development
 
@@ -14,6 +18,11 @@ npm install
 npm run lint
 npm test
 ```
+
+### Test scripts
+
+- `npm run test:unit`: unit tests for mock service, form detection, and modal logic.
+- `npm run test:e2e`: DOM-level end-to-end flow tests for modal selection and cancel behavior.
 
 ## Load in Firefox
 
