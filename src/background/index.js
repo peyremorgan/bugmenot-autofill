@@ -1,53 +1,6 @@
 console.log("[BugMeNot] Background script loading...");
 
-// Mock credential service (inlined for Firefox compatibility)
-const DEFAULT_CREDENTIALS = Object.freeze([
-  { username: "demo_user_1", password: "demo_pass_1" },
-  { username: "demo_user_2", password: "demo_pass_2" },
-  { username: "demo_user_3", password: "demo_pass_3" }
-]);
-
-const DOMAIN_OVERRIDES = Object.freeze({
-  "example.com": Object.freeze([
-    { username: "reader@example.com", password: "example-pass-123" },
-    { username: "trial@example.com", password: "trial-pass-456" }
-  ]),
-  "news.ycombinator.com": Object.freeze([
-    { username: "hn_reader", password: "hn_mock_password" },
-    { username: "community_user", password: "community_mock_password" }
-  ])
-});
-
-function getMockCredentialsForDomain(domain) {
-  const normalized = normalizeDomain(domain);
-  if (!normalized) {
-    return [...DEFAULT_CREDENTIALS];
-  }
-
-  if (DOMAIN_OVERRIDES[normalized]) {
-    return [...DOMAIN_OVERRIDES[normalized]];
-  }
-
-  return [...DEFAULT_CREDENTIALS];
-}
-
-function normalizeDomain(input) {
-  if (!input || typeof input !== "string") {
-    return "";
-  }
-
-  const value = input.trim().toLowerCase();
-  return value.startsWith("www.") ? value.slice(4) : value;
-}
-
-function extractDomainFromUrl(url) {
-  try {
-    const parsed = new URL(url);
-    return normalizeDomain(parsed.hostname);
-  } catch {
-    return "";
-  }
-}
+import { getMockCredentialsForDomain, extractDomainFromUrl } from "../common/mockCredentialService.js";
 
 // Context menu setup
 const MENU_ID = "bugmenot-autofill-open-picker";
@@ -100,22 +53,22 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     return;
   }
 
-  try {
-    const domain = extractDomainFromUrl(info.pageUrl || tab.url || "");
-    const credentials = getMockCredentialsForDomain(domain);
-    console.log("[BugMeNot] Sending credentials to tab:", { domain, credentialCount: credentials.length });
+  const domain = extractDomainFromUrl(tab.url);
+  const credentials = getMockCredentialsForDomain(domain);
+  console.log(`[BugMeNot] Domain: ${domain}, Credentials count: ${credentials.length}`);
 
+  try {
     await browser.tabs.sendMessage(tab.id, {
       type: "bugmenot:openCredentialPicker",
       payload: {
         domain,
         credentials,
-        targetElementId: info.targetElementId || null
+        targetElementId: info.targetElementId
       }
     });
-    console.log("[BugMeNot] Message sent successfully");
+    console.log("[BugMeNot] Message sent to content script");
   } catch (error) {
-    console.error("[BugMeNot] Failed to open credential picker:", error);
+    console.error("[BugMeNot] Failed to send message to content script:", error);
   }
 });
 

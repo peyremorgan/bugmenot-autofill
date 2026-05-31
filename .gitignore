@@ -2,6 +2,7 @@ node_modules/
 .vscode/
 .web-ext-artifacts/
 coverage/
+dist/
 .DS_Store
 *.log
 *.xpi

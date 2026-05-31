@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node build.js",
     "lint": "eslint .",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:e2e": "vitest run tests/e2e"
   },
   "devDependencies": {
+    "esbuild": "^0.28.0",
     "eslint": "^9.29.0",
     "globals": "^15.15.0",
     "jsdom": "^26.1.0",

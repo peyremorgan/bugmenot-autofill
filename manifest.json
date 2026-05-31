@@ -14,12 +14,12 @@
     "*://*/*"
   ],
   "background": {
-    "scripts": ["background/background.js"]
+    "scripts": ["dist/background/background.js"]
   },
   "content_scripts": [
     {
       "matches": ["*://*/*"],
-      "js": ["content/content.js"],
+      "js": ["dist/content/content.js"],
       "run_at": "document_idle"
     }
   ]
