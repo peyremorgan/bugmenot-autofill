@@ -5,10 +5,20 @@ Browser extension to autofill login forms with BugMeNot credentials.
 ## Current status
 
 - Fetches credentials from `https://bugmenot.com/view/{domain}` on demand.
+- Caches fetched credentials in memory for 1 hour per normalized domain.
+- Deduplicates simultaneous credential requests for the same domain into a single network request.
+- Caches empty credential results for the same 1-hour TTL to avoid repeated lookups for domains with no public credentials.
 - Decrypts BugMeNot's `data-s` credential fields client-side in the extension.
 - Returns an empty credential list when fetch/parsing fails and logs the error.
 - Right-click on a password field and choose `BugMeNot Autofill...`.
 - A modal displays multiple credentials; user selection fills username/password.
+
+### Cache behavior
+
+- Cache scope: background script in-memory cache (clears when the extension process restarts).
+- Cache key: normalized domain (for example, `www.example.com` and `example.com` share the same cache entry).
+- TTL: 1 hour.
+- Failed HTTP/network requests are not cached.
 
 ## Development
 
