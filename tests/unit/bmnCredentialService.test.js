@@ -278,4 +278,23 @@ describe("bmnCredentialService", () => {
     await fetchCredentialsForDomain("ttl.example");
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
+
+  it("expires empty cache entries after 1 minute", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => "<div id='content'></div>"
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await fetchCredentialsForDomain("empty.example");
+    await fetchCredentialsForDomain("empty.example");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date("2026-01-01T00:01:00.001Z"));
+    await fetchCredentialsForDomain("empty.example");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
 });

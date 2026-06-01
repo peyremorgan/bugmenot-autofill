@@ -35,6 +35,7 @@ const XOR_KEY = Object.freeze([
 
 const BUGMENOT_BASE_URL = "https://bugmenot.com/view/";
 const CACHE_TTL_MS = 60 * 60 * 1000;
+const EMPTY_CACHE_TTL_MS = 60 * 1000;
 
 const credentialCache = new Map();
 const inFlightRequests = new Map();
@@ -60,10 +61,10 @@ function getCachedCredentials(domain) {
   return cloneCredentials(entry.credentials);
 }
 
-function setCachedCredentials(domain, credentials) {
+function setCachedCredentials(domain, credentials, ttl = CACHE_TTL_MS) {
   credentialCache.set(domain, {
     credentials: cloneCredentials(credentials),
-    expiresAt: Date.now() + CACHE_TTL_MS
+    expiresAt: Date.now() + ttl
   });
 }
 
@@ -210,7 +211,8 @@ export async function fetchCredentialsForDomain(domain) {
     }
 
     console.debug(`[BugMeNot] Fetched ${credentials.length} credentials`);
-    setCachedCredentials(normalizedDomain, credentials);
+    const ttl = credentials.length === 0 ? EMPTY_CACHE_TTL_MS : CACHE_TTL_MS;
+    setCachedCredentials(normalizedDomain, credentials, ttl);
     return cloneCredentials(credentials);
   })();
 
