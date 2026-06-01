@@ -149,7 +149,8 @@ export function extractDecryptionParams(scriptText) {
     const nums = match[2]
       .split(",")
       .map((token) => Number.parseInt(token.trim(), 10))
-      .filter((value) => Number.isInteger(value));
+      .filter((value) => Number.isInteger(value))
+      .map((value) => value & 0xFF); // Ensure 0-255 range (modulo 256)
     if (nums.length > 0) {
       arrayDecls.set(name, nums);
     }
@@ -160,48 +161,87 @@ export function extractDecryptionParams(scriptText) {
     return { attrName, key: arrayDecls.get(xorKeyVarName) };
   }
 
-  // Otherwise expect a concat chain: `var K = A.concat(B).concat(C)...;`
+  // Try concat chain: `var K = A.concat(B).concat(C)...;`
   const concatDeclRegex = new RegExp(
     `var\\s+${xorKeyVarName}\\s*=\\s*([A-Za-z_$][\\w$]*(?:\\s*\\.\\s*concat\\s*\\(\\s*[A-Za-z_$][\\w$]*\\s*\\))+)\\s*;`
   );
   const concatMatch = scriptText.match(concatDeclRegex);
-  if (!concatMatch) {
-    return null;
-  }
-
-  const chain = concatMatch[1];
-  const firstVarMatch = chain.match(/^([A-Za-z_$][\w$]*)/);
-  if (!firstVarMatch) {
-    return null;
-  }
-
-  const partNames = [firstVarMatch[1]];
-  const concatPartRegex = /\.\s*concat\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g;
-  let partMatch;
-  while ((partMatch = concatPartRegex.exec(chain)) !== null) {
-    partNames.push(partMatch[1]);
-  }
-
-  const key = [];
-  for (const name of partNames) {
-    const arr = arrayDecls.get(name);
-    if (!arr) {
+  if (concatMatch) {
+    const chain = concatMatch[1];
+    const firstVarMatch = chain.match(/^([A-Za-z_$][\w$]*)/);
+    if (!firstVarMatch) {
       return null;
     }
-    key.push(...arr);
+
+    const partNames = [firstVarMatch[1]];
+    const concatPartRegex = /\.\s*concat\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g;
+    let partMatch;
+    while ((partMatch = concatPartRegex.exec(chain)) !== null) {
+      partNames.push(partMatch[1]);
+    }
+
+    const key = [];
+    for (const name of partNames) {
+      const arr = arrayDecls.get(name);
+      if (!arr) {
+        return null;
+      }
+      key.push(...arr);
+    }
+
+    return { attrName, key };
   }
 
-  return { attrName, key };
+  // Try transformation loop: `var TARGET = []; for (...) TARGET.push(SOURCE[i] OP NUM);`
+  const loopTransformRegex = new RegExp(
+    `var\\s+${xorKeyVarName}\\s*=\\s*\\[\\];[\\s\\S]*?for\\s*\\([^)]+\\)\\s*${xorKeyVarName}\\.push\\(([A-Za-z_$][\\w$]*)\\[[^\\]]+\\]\\s*([+\\-*/%])\\s*(\\d+)\\)`
+  );
+  const loopMatch = scriptText.match(loopTransformRegex);
+  if (loopMatch) {
+    const sourceVarName = loopMatch[1];
+    const operator = loopMatch[2];
+    const operand = Number.parseInt(loopMatch[3], 10);
+
+    const sourceArray = arrayDecls.get(sourceVarName);
+    if (!sourceArray) {
+      return null;
+    }
+
+    const key = sourceArray.map((value) => {
+      let result;
+      switch (operator) {
+        case "+": result = value + operand; break;
+        case "-": result = value - operand; break;
+        case "*": result = value * operand; break;
+        case "/": result = Math.floor(value / operand); break;
+        case "%": result = value % operand; break;
+        default: result = value;
+      }
+      return result & 0xFF; // Ensure 0-255
+    });
+
+    return { attrName, key };
+  }
+
+  return null;
 }
 
 function findDecryptionParamsInDocument(doc) {
   const scripts = doc.querySelectorAll("script");
+  console.debug(`[BugMeNot] Found ${scripts.length} <script> tags in parsed document`);
+  
   for (const script of scripts) {
-    const params = extractDecryptionParams(script.textContent || "");
+    const scriptText = script.textContent || "";
+    if (scriptText.length > 0) {
+      console.debug(`[BugMeNot] Checking script (${scriptText.length} chars): ${scriptText.substring(0, 100)}...`);
+    }
+    const params = extractDecryptionParams(scriptText);
     if (params) {
       return params;
     }
   }
+  
+  console.debug("[BugMeNot] No decryption script found in any <script> tag");
   return null;
 }
 
@@ -229,7 +269,28 @@ export function parseCredentialsFromHtml(htmlString) {
       return [];
     }
 
-    const params = findDecryptionParamsInDocument(parsed);
+    // Try to find the decryption script in the parsed document
+    let params = findDecryptionParamsInDocument(parsed);
+    
+    // Fallback: if DOMParser stripped scripts, search the raw HTML
+    if (!params) {
+      console.debug("[BugMeNot] Fallback: searching raw HTML for inline script");
+      const scriptMatch = htmlString.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+      if (scriptMatch) {
+        console.debug(`[BugMeNot] Found script tag in raw HTML (${scriptMatch[1].length} chars)`);
+        params = extractDecryptionParams(scriptMatch[1]);
+        
+        // If first script didn't work, try all scripts
+        if (!params) {
+          const allScripts = htmlString.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi);
+          for (const match of allScripts) {
+            params = extractDecryptionParams(match[1]);
+            if (params) break;
+          }
+        }
+      }
+    }
+    
     if (!params) {
       console.error(
         "[BugMeNot] Could not locate decryption script in HTML response"

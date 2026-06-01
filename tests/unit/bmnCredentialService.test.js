@@ -167,6 +167,50 @@ describe("bmnCredentialService", () => {
       });
     });
 
+    it("handles arrays with numbers > 255 by applying modulo 256", () => {
+      const scriptText = `
+        var part1 = [121, 220, 280, 305];
+        var part2 = [10, 256, 257];
+        var key = part1.concat(part2);
+        var els = document.querySelectorAll('[data-y]');
+        var c = raw.charCodeAt(0) ^ key[0 % key.length];
+      `;
+      expect(extractDecryptionParams(scriptText)).toEqual({
+        attrName: "data-y",
+        key: [121, 220, 24, 49, 10, 0, 1] // 280%256=24, 305%256=49, 256%256=0, 257%256=1
+      });
+    });
+
+    it("handles transformation loops (e.g. subtract operation)", () => {
+      const scriptText = `
+        var K7y = [121, 220, 240, 65, 280, 305];
+        var _iF3 = [];
+        for (var mb1 = 0; mb1 < K7y.length; mb1++) _iF3.push(K7y[mb1] - 55);
+        var els = document.querySelectorAll('[data-t]');
+        var c = raw.charCodeAt(0) ^ _iF3[0 % _iF3.length];
+      `;
+      // Expected: each value from K7y - 55, then mod 256
+      // 121-55=66, 220-55=165, 240-55=185, 65-55=10, 280-55=225, 305-55=250
+      expect(extractDecryptionParams(scriptText)).toEqual({
+        attrName: "data-t",
+        key: [66, 165, 185, 10, 225, 250]
+      });
+    });
+
+    it("handles transformation loops with addition", () => {
+      const scriptText = `
+        var src = [10, 20, 30];
+        var key = [];
+        for (var i = 0; i < src.length; i++) key.push(src[i] + 100);
+        var els = document.querySelectorAll('[data-z]');
+        var c = raw.charCodeAt(0) ^ key[0];
+      `;
+      expect(extractDecryptionParams(scriptText)).toEqual({
+        attrName: "data-z",
+        key: [110, 120, 130]
+      });
+    });
+
     it("returns null when the script does not match", () => {
       expect(extractDecryptionParams("console.log('hi')")).toBeNull();
       expect(extractDecryptionParams("")).toBeNull();
