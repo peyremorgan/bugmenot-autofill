@@ -1,38 +1,3 @@
-const XOR_KEY = Object.freeze([
-  119,
-  166,
-  92,
-  105,
-  28,
-  173,
-  47,
-  207,
-  249,
-  203,
-  255,
-  136,
-  153,
-  90,
-  130,
-  253,
-  39,
-  33,
-  110,
-  148,
-  234,
-  71,
-  192,
-  246,
-  5,
-  243,
-  90,
-  247,
-  27,
-  15,
-  245,
-  46
-]);
-
 const BUGMENOT_BASE_URL = "https://bugmenot.com/view/";
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const EMPTY_CACHE_TTL_MS = 60 * 1000;
@@ -78,7 +43,7 @@ async function requestCredentialsFromBugMeNot(url) {
     });
 
     console.debug(`[BugMeNot] Fetch response status: ${response.status} ${response.statusText}`);
-    
+
     if (!response.ok) {
       console.error(`[BugMeNot] Failed to fetch credentials (${response.status}) for ${url}`);
       return null;
@@ -108,17 +73,24 @@ function bytesToText(bytes) {
   return String.fromCharCode(...bytes);
 }
 
-export function decryptDataU(dataUValue) {
-  if (!dataUValue || typeof dataUValue !== "string") {
+/**
+ * Decrypt a base64-encoded value using an XOR key (array of byte values).
+ * Returns "" on invalid input or on decode error.
+ */
+export function decryptValue(encodedValue, xorKey) {
+  if (!encodedValue || typeof encodedValue !== "string") {
+    return "";
+  }
+  if (!Array.isArray(xorKey) || xorKey.length === 0) {
     return "";
   }
 
   try {
-    const bytes = base64ToBytes(dataUValue);
+    const bytes = base64ToBytes(encodedValue);
     const decrypted = [];
 
     for (let index = 0; index < bytes.length; index += 1) {
-      decrypted.push(bytes[index] ^ XOR_KEY[index % XOR_KEY.length]);
+      decrypted.push(bytes[index] ^ xorKey[index % xorKey.length]);
     }
 
     return bytesToText(decrypted).trim();
@@ -126,6 +98,111 @@ export function decryptDataU(dataUValue) {
     console.error("[BugMeNot] Failed to decrypt credential value:", error);
     return "";
   }
+}
+
+/**
+ * Parse an inline obfuscated decryption script (as served by bugmenot.com)
+ * and extract the data attribute name and XOR key bytes.
+ *
+ * The script roughly looks like:
+ *
+ *   var A = [ n, n, n, ... ];
+ *   var B = [ n, n, n, ... ];
+ *   var K = A.concat(B);
+ *   var els = document.querySelectorAll('[data-X]');
+ *   ... atob(el.getAttribute('data-X')) ... ^ K[i % K.length] ...
+ *
+ * Variable names, the attribute suffix (`X`), and the number/size of arrays
+ * are randomized between requests.
+ *
+ * Returns `{ attrName, key }` on success, or `null` if the script does not
+ * match the expected shape.
+ */
+export function extractDecryptionParams(scriptText) {
+  if (!scriptText || typeof scriptText !== "string") {
+    return null;
+  }
+
+  const attrSuffixMatch = scriptText.match(
+    /querySelectorAll\s*\(\s*['"]\[data-([A-Za-z0-9_-]+)\]['"]\s*\)/
+  );
+  if (!attrSuffixMatch) {
+    return null;
+  }
+  const attrName = `data-${attrSuffixMatch[1]}`;
+
+  // Identifier used as the XOR key inside the decryption loop:
+  //   var X = a.charCodeAt(i) ^ KEYVAR[i % KEYVAR.length];
+  const xorKeyVarMatch = scriptText.match(/\^\s*([A-Za-z_$][\w$]*)\s*\[/);
+  if (!xorKeyVarMatch) {
+    return null;
+  }
+  const xorKeyVarName = xorKeyVarMatch[1];
+
+  // Collect every `var NAME = [ ...numbers... ];` declaration in the script.
+  const arrayDecls = new Map();
+  const arrayDeclRegex =
+    /var\s+([A-Za-z_$][\w$]*)\s*=\s*\[\s*([\d\s,]+?)\s*\]\s*;/g;
+  let match;
+  while ((match = arrayDeclRegex.exec(scriptText)) !== null) {
+    const name = match[1];
+    const nums = match[2]
+      .split(",")
+      .map((token) => Number.parseInt(token.trim(), 10))
+      .filter((value) => Number.isInteger(value));
+    if (nums.length > 0) {
+      arrayDecls.set(name, nums);
+    }
+  }
+
+  // Direct array declaration.
+  if (arrayDecls.has(xorKeyVarName)) {
+    return { attrName, key: arrayDecls.get(xorKeyVarName) };
+  }
+
+  // Otherwise expect a concat chain: `var K = A.concat(B).concat(C)...;`
+  const concatDeclRegex = new RegExp(
+    `var\\s+${xorKeyVarName}\\s*=\\s*([A-Za-z_$][\\w$]*(?:\\s*\\.\\s*concat\\s*\\(\\s*[A-Za-z_$][\\w$]*\\s*\\))+)\\s*;`
+  );
+  const concatMatch = scriptText.match(concatDeclRegex);
+  if (!concatMatch) {
+    return null;
+  }
+
+  const chain = concatMatch[1];
+  const firstVarMatch = chain.match(/^([A-Za-z_$][\w$]*)/);
+  if (!firstVarMatch) {
+    return null;
+  }
+
+  const partNames = [firstVarMatch[1]];
+  const concatPartRegex = /\.\s*concat\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g;
+  let partMatch;
+  while ((partMatch = concatPartRegex.exec(chain)) !== null) {
+    partNames.push(partMatch[1]);
+  }
+
+  const key = [];
+  for (const name of partNames) {
+    const arr = arrayDecls.get(name);
+    if (!arr) {
+      return null;
+    }
+    key.push(...arr);
+  }
+
+  return { attrName, key };
+}
+
+function findDecryptionParamsInDocument(doc) {
+  const scripts = doc.querySelectorAll("script");
+  for (const script of scripts) {
+    const params = extractDecryptionParams(script.textContent || "");
+    if (params) {
+      return params;
+    }
+  }
+  return null;
 }
 
 export function buildBugMeNotUrl(domain) {
@@ -141,24 +218,54 @@ export function parseCredentialsFromHtml(htmlString) {
 
   try {
     const parsed = new DOMParser().parseFromString(htmlString, "text/html");
-    const nodes = parsed.querySelectorAll("#content .account .account__credentials");
-    console.debug(`[BugMeNot] Found ${nodes.length} .account__credentials nodes`);
-    
+
+    const accountNodes = parsed.querySelectorAll(
+      "#content .account .account__credentials"
+    );
+    console.debug(
+      `[BugMeNot] Found ${accountNodes.length} .account__credentials nodes`
+    );
+    if (accountNodes.length === 0) {
+      return [];
+    }
+
+    const params = findDecryptionParamsInDocument(parsed);
+    if (!params) {
+      console.error(
+        "[BugMeNot] Could not locate decryption script in HTML response"
+      );
+      return [];
+    }
+    console.debug(
+      `[BugMeNot] Extracted decryption params: attr=${params.attrName}, keyLen=${params.key.length}`
+    );
+
+    const selector = `[${params.attrName}]`;
     const credentials = [];
 
-    for (const node of nodes) {
-      const encryptedFields = node.querySelectorAll("kbd[data-u]");
-      console.debug(`[BugMeNot] Found ${encryptedFields.length} kbd[data-u] elements in node`);
-      
+    for (const node of accountNodes) {
+      const encryptedFields = node.querySelectorAll(selector);
+      console.debug(
+        `[BugMeNot] Found ${encryptedFields.length} ${selector} elements in node`
+      );
+
       if (encryptedFields.length < 2) {
         console.debug("[BugMeNot] Skipping node - insufficient encrypted fields");
         continue;
       }
 
-      const username = decryptDataU(encryptedFields[0].getAttribute("data-u"));
-      const password = decryptDataU(encryptedFields[1].getAttribute("data-u"));
-      
-      console.debug(`[BugMeNot] Decrypted: username="${username}", password="${password ? '***' : '(empty)'}"`);
+      const username = decryptValue(
+        encryptedFields[0].getAttribute(params.attrName),
+        params.key
+      );
+      const password = decryptValue(
+        encryptedFields[1].getAttribute(params.attrName),
+        params.key
+      );
+
+      console.debug(
+        `[BugMeNot] Decrypted: username="${username}", password="${password ? "***" : "(empty)"}"`
+      );
 
       if (!username || !password) {
         console.debug("[BugMeNot] Skipping node - empty username or password");
@@ -168,7 +275,9 @@ export function parseCredentialsFromHtml(htmlString) {
       credentials.push({ username, password });
     }
 
-    console.debug(`[BugMeNot] Successfully parsed ${credentials.length} credentials`);
+    console.debug(
+      `[BugMeNot] Successfully parsed ${credentials.length} credentials`
+    );
     return credentials;
   } catch (error) {
     console.error("[BugMeNot] Failed to parse credentials from HTML:", error);
@@ -204,7 +313,7 @@ export async function fetchCredentialsForDomain(domain) {
   const requestPromise = (async () => {
     console.debug(`[BugMeNot] Fetching credentials from: ${url}`);
     const credentials = await requestCredentialsFromBugMeNot(url);
-    
+
     if (credentials === null) {
       console.error("[BugMeNot] requestCredentialsFromBugMeNot returned null");
       return [];
