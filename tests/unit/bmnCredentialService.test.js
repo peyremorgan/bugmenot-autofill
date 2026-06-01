@@ -3,48 +3,48 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   __resetCredentialCacheForTesting,
   buildBugMeNotUrl,
-  decryptDataS,
+  decryptDataU,
   extractDomainFromUrl,
   fetchCredentialsForDomain,
   normalizeDomain
 } from "../../src/common/bmnCredentialService.js";
 
 const XOR_KEY = Object.freeze([
-  27,
-  135,
-  200,
-  32,
-  166,
-  10,
-  34,
-  210,
-  111,
-  231,
-  13,
-  146,
   119,
-  158,
-  23,
-  136,
-  231,
+  166,
+  92,
+  105,
   28,
-  196,
-  42,
-  111,
-  138,
-  180,
-  248,
-  182,
-  233,
-  254,
-  141,
-  8,
-  81,
-  139,
-  226
+  173,
+  47,
+  207,
+  249,
+  203,
+  255,
+  136,
+  153,
+  90,
+  130,
+  253,
+  39,
+  33,
+  110,
+  148,
+  234,
+  71,
+  192,
+  246,
+  5,
+  243,
+  90,
+  247,
+  27,
+  15,
+  245,
+  46
 ]);
 
-function encodeDataS(value) {
+function encodeDataU(value) {
   const encryptedChars = [];
   for (let index = 0; index < value.length; index += 1) {
     encryptedChars.push(String.fromCharCode(value.charCodeAt(index) ^ XOR_KEY[index % XOR_KEY.length]));
@@ -73,9 +73,9 @@ describe("bmnCredentialService", () => {
     expect(buildBugMeNotUrl(" WWW.Example.com ")).toBe("https://bugmenot.com/view/example.com");
   });
 
-  it("decrypts data-s values", () => {
-    const encoded = encodeDataS("reader@example.com");
-    expect(decryptDataS(encoded)).toBe("reader@example.com");
+  it("decrypts data-u values", () => {
+    const encoded = encodeDataU("reader@example.com");
+    expect(decryptDataU(encoded)).toBe("reader@example.com");
   });
 
   it("fetches and parses credentials from bugmenot HTML", async () => {
@@ -83,14 +83,14 @@ describe("bmnCredentialService", () => {
       <div id="content">
         <div class="account">
           <div class="account__credentials">
-            <kbd data-s="${encodeDataS("reader@example.com")}"></kbd>
-            <kbd data-s="${encodeDataS("example-pass-123")}"></kbd>
+            <kbd data-u="${encodeDataU("reader@example.com")}"></kbd>
+            <kbd data-u="${encodeDataU("example-pass-123")}"></kbd>
           </div>
         </div>
         <div class="account">
           <div class="account__credentials">
-            <kbd data-s="${encodeDataS("trial@example.com")}"></kbd>
-            <kbd data-s="${encodeDataS("trial-pass-456")}"></kbd>
+            <kbd data-u="${encodeDataU("trial@example.com")}"></kbd>
+            <kbd data-u="${encodeDataU("trial-pass-456")}"></kbd>
           </div>
         </div>
       </div>
@@ -163,8 +163,8 @@ describe("bmnCredentialService", () => {
       <div id="content">
         <div class="account">
           <div class="account__credentials">
-            <kbd data-s="${encodeDataS("cached-user@example.com")}"></kbd>
-            <kbd data-s="${encodeDataS("cached-pass-123")}"></kbd>
+            <kbd data-u="${encodeDataU("cached-user@example.com")}"></kbd>
+            <kbd data-u="${encodeDataU("cached-pass-123")}"></kbd>
           </div>
         </div>
       </div>
@@ -218,8 +218,8 @@ describe("bmnCredentialService", () => {
       <div id="content">
         <div class="account">
           <div class="account__credentials">
-            <kbd data-s="${encodeDataS("parallel-user@example.com")}"></kbd>
-            <kbd data-s="${encodeDataS("parallel-pass-123")}"></kbd>
+            <kbd data-u="${encodeDataU("parallel-user@example.com")}"></kbd>
+            <kbd data-u="${encodeDataU("parallel-pass-123")}"></kbd>
           </div>
         </div>
       </div>
@@ -257,8 +257,8 @@ describe("bmnCredentialService", () => {
       <div id="content">
         <div class="account">
           <div class="account__credentials">
-            <kbd data-s="${encodeDataS("ttl-user@example.com")}"></kbd>
-            <kbd data-s="${encodeDataS("ttl-pass-123")}"></kbd>
+            <kbd data-u="${encodeDataU("ttl-user@example.com")}"></kbd>
+            <kbd data-u="${encodeDataU("ttl-pass-123")}"></kbd>
           </div>
         </div>
       </div>

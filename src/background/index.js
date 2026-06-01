@@ -1,14 +1,10 @@
-console.log("[BugMeNot] Background script loading...");
-
 import { fetchCredentialsForDomain, extractDomainFromUrl } from "../common/bmnCredentialService.js";
 
 // Context menu setup
 const MENU_ID = "bugmenot-autofill-open-picker";
 
-console.log("[BugMeNot] Registering onInstalled listener...");
-
 browser.runtime.onInstalled.addListener(() => {
-  console.log("[BugMeNot] onInstalled fired, creating context menu...");
+  console.debug("[BugMeNot] onInstalled fired, creating context menu...");
   browser.menus.create(
     {
       id: MENU_ID,
@@ -20,23 +16,21 @@ browser.runtime.onInstalled.addListener(() => {
       if (lastError) {
         console.error("[BugMeNot] Failed to create context menu:", lastError);
       } else {
-        console.log("[BugMeNot] Context menu created successfully!");
+        console.debug("[BugMeNot] Context menu created successfully!");
       }
     }
   );
 });
-
-console.log("[BugMeNot] Registering onMessage listener...");
 
 browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type !== "bugmenot:getCredentials") {
     return undefined;
   }
 
-  console.log("[BugMeNot] Received getCredentials message:", message);
+  console.debug("[BugMeNot] Received getCredentials message:", message);
   try {
     const credentials = await fetchCredentialsForDomain(message.domain);
-    console.log("[BugMeNot] Returning credentials:", credentials);
+    console.debug("[BugMeNot] Returning credentials:", credentials);
     return { ok: true, credentials };
   } catch (error) {
     console.error("[BugMeNot] Failed to resolve credentials:", error);
@@ -44,18 +38,25 @@ browser.runtime.onMessage.addListener(async (message) => {
   }
 });
 
-console.log("[BugMeNot] Registering menus.onClicked listener...");
-
 browser.menus.onClicked.addListener(async (info, tab) => {
-  console.log("[BugMeNot] Context menu clicked:", info);
+  console.debug("[BugMeNot] Context menu clicked:", info);
   if (info.menuItemId !== MENU_ID || !tab?.id) {
-    console.log("[BugMeNot] Ignoring click - wrong menu ID or no tab");
+    console.debug("[BugMeNot] Ignoring click - wrong menu ID or no tab");
     return;
   }
 
+  console.debug(`[BugMeNot] Tab URL: ${tab.url}`);
   const domain = extractDomainFromUrl(tab.url);
+  console.debug(`[BugMeNot] Extracted domain: "${domain}"`);
+  
+  if (!domain) {
+    console.error("[BugMeNot] Failed to extract domain from URL");
+    return;
+  }
+  
   const credentials = await fetchCredentialsForDomain(domain);
-  console.log(`[BugMeNot] Domain: ${domain}, Credentials count: ${credentials.length}`);
+  console.debug(`[BugMeNot] Domain: ${domain}, Credentials count: ${credentials.length}`);
+  console.debug("[BugMeNot] Credentials:", credentials);
 
   try {
     await browser.tabs.sendMessage(tab.id, {
@@ -66,10 +67,8 @@ browser.menus.onClicked.addListener(async (info, tab) => {
         targetElementId: info.targetElementId
       }
     });
-    console.log("[BugMeNot] Message sent to content script");
+    console.debug("[BugMeNot] Message sent to content script");
   } catch (error) {
     console.error("[BugMeNot] Failed to send message to content script:", error);
   }
 });
-
-console.log("[BugMeNot] Background script loaded successfully!");
