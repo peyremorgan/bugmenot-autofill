@@ -67,4 +67,41 @@ describe("credentialModal", () => {
     clearCredentialModal();
     expect(document.getElementById("bugmenot-autofill-modal")).toBeNull();
   });
+
+  it("limits the visible credentials to 10", () => {
+    const credentials = Array.from({ length: 15 }, (_, index) => ({
+      username: `u${index}`,
+      password: `p${index}`
+    }));
+
+    renderCredentialModal({
+      domain: "example.com",
+      credentials,
+      onSelect: vi.fn(),
+      onClose: vi.fn()
+    });
+
+    const buttons = document.querySelectorAll("#bugmenot-autofill-modal button[data-index]");
+    expect(buttons.length).toBe(10);
+    expect(buttons[0].textContent).toBe("u0 / p0");
+    expect(buttons[9].textContent).toBe("u9 / p9");
+  });
+
+  it("shows all credentials when exactly 10 are provided", () => {
+    const credentials = Array.from({ length: 10 }, (_, index) => ({
+      username: `user-${index}`,
+      password: `pass-${index}`
+    }));
+
+    renderCredentialModal({
+      domain: "example.com",
+      credentials,
+      onSelect: vi.fn(),
+      onClose: vi.fn()
+    });
+
+    const buttons = document.querySelectorAll("#bugmenot-autofill-modal button[data-index]");
+    expect(buttons.length).toBe(10);
+    expect(buttons[9].textContent).toBe("user-9 / pass-9");
+  });
 });

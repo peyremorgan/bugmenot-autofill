@@ -107,4 +107,38 @@ describe("e2e modal autofill flow", () => {
     expect(document.getElementById("login-username").value).toBe("reactive-user");
     expect(document.getElementById("login-password").value).toBe("reactive-pass");
   });
+
+  it("shows only first 10 credentials when more are provided", async () => {
+    const credentials = Array.from({ length: 12 }, (_, index) => ({
+      username: `bulk-user-${index}`,
+      password: `bulk-pass-${index}`
+    }));
+
+    renderCredentialModal({
+      domain: "example.com",
+      credentials,
+      onSelect: async (credential) => {
+        const fields = findLoginFields(document);
+        await applyCredential(fields, credential, {
+          betweenFieldsDelayMs: 0,
+          fieldFocusDelayMs: 0,
+          mutationWindowMs: 0,
+          retryDelayMs: 0
+        });
+      },
+      onClose: vi.fn()
+    });
+
+    const options = document.querySelectorAll("button[data-index]");
+    expect(options.length).toBe(10);
+
+    const hiddenOption = document.querySelector("button[data-index='10']");
+    expect(hiddenOption).toBeNull();
+
+    options[9].click();
+    await waitForAutofillCycle();
+
+    expect(document.getElementById("login-username").value).toBe("bulk-user-9");
+    expect(document.getElementById("login-password").value).toBe("bulk-pass-9");
+  });
 });

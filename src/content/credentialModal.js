@@ -1,4 +1,5 @@
 const MODAL_ID = "bugmenot-autofill-modal";
+const MAX_VISIBLE_CREDENTIALS = 10;
 
 export function clearCredentialModal(root = document) {
   const existing = root.getElementById(MODAL_ID);
@@ -9,6 +10,7 @@ export function clearCredentialModal(root = document) {
 
 export function renderCredentialModal({ domain, credentials, onSelect, onClose }, root = document) {
   clearCredentialModal(root);
+  const visibleCredentials = credentials.slice(0, MAX_VISIBLE_CREDENTIALS);
 
   const overlay = root.createElement("div");
   overlay.id = MODAL_ID;
@@ -44,7 +46,7 @@ export function renderCredentialModal({ domain, credentials, onSelect, onClose }
   list.style.display = "grid";
   list.style.gap = "8px";
 
-  credentials.forEach((credential, index) => {
+  visibleCredentials.forEach((credential, index) => {
     const row = root.createElement("button");
     row.type = "button";
     row.style.textAlign = "left";
